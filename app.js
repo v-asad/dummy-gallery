@@ -6,11 +6,13 @@ const bodyParser = require("body-parser");
 const { db, initDb } = require("./db");
 const { authMiddleware, generateToken } = require("./auth");
 const fs = require("fs");
+const cors = require("cors");
 
 const app = express();
 const upload = multer({ dest: path.join(__dirname, "uploads") });
 
 app.use(bodyParser.json());
+app.use(cors({ origin: "*" }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 initDb();
@@ -38,7 +40,7 @@ app.post("/api/login", (req, res) => {
     .get(username, password);
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
   const token = generateToken(user.id);
-  res.json({ token });
+  res.json({ token, id: user.id });
 });
 
 // Get user profile
@@ -66,12 +68,7 @@ app.post("/api/photos", authMiddleware, upload.single("image"), (req, res) => {
   const stmt = db.prepare(
     "INSERT INTO photos (user_id, filename, caption, createdAt) VALUES (?, ?, ?, ?)"
   );
-  const info = stmt.run(
-    req.userId,
-    newFilename,
-    caption || "",
-    Date.now()
-  );
+  const info = stmt.run(req.userId, newFilename, caption || "", Date.now());
   res.json({ id: info.lastInsertRowid });
 });
 
@@ -121,6 +118,17 @@ app.get("/api/photos/user/:userId", (req, res) => {
     .prepare("SELECT * FROM photos WHERE user_id = ? ORDER BY createdAt DESC")
     .all(req.params.userId);
   res.json(photos);
+});
+
+// Get image by photo ID
+app.get("/api/photos/:id", (req, res) => {
+  const photo = db
+    .prepare("SELECT * FROM photos WHERE id = ?")
+    .get(req.params.id);
+
+  if (!photo) return res.status(404).json({ error: "Image not found" });
+
+  res.json({ photo });
 });
 
 const PORT = 8080;
